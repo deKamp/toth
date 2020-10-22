@@ -515,21 +515,31 @@ class Maze:
                                              mirr_x=mirr_x, mirr_y=mirr_y, life=24, grav=0, foe=False))
 
     def player_slice(self, tiles, audio, settings):
+        """ Обработка "удара" (нажатия клавиши x) """
+
         player_view_x, player_view_y = self.calculate_offsets(self.player.x, self.player.y, settings)
+        # направления удара:
         if self.player.direction == 0:
+            # direction - up
             sq_x, sq_y = player_view_x, (player_view_y - self.square_size)
         elif self.player.direction == 1:
+            # direction - right
             sq_x, sq_y = (player_view_x + self.square_size), player_view_y
         elif self.player.direction == 2:
+            # direction - down
             sq_x, sq_y = player_view_x, (player_view_y + self.square_size)
         elif self.player.direction == 3:
+            # direction - left
             sq_x, sq_y = (player_view_x - self.square_size), player_view_y
+
+        # Если с кем-то бьёмся?
         for i in range(0, len(self.encounters)):
             try:
                 enc_view_x, enc_view_y = self.calculate_offsets(round(self.encounters[i].x),
                                                                 round(self.encounters[i].y), settings)
                 if abs(sq_x - enc_view_x) < 8 and abs(sq_y - enc_view_y) < 8:
                     self.encounters[i].lives -= 1
+
                     for j in range(0, 4):
                         rnd_sp = random.randrange(-1, 2)
                         self.particles.append(particle.Particle(self.encounters[i].x + self.square_size // 2,
@@ -556,8 +566,11 @@ class Maze:
                     return
             except IndexError:
                 pass
+        # Смотрим что попало под удар
         square = self.square_get(sq_x // self.square_size, sq_y // self.square_size)
+        # Если что-то попало, то проверяем что с этим делать
         if square is not None:
+
             for i in range(0, 3):
                 rnd = random.randrange(self.square_size // -4, self.square_size // 4)
                 rnd_sp = random.randrange(-1, 2)
@@ -565,6 +578,7 @@ class Maze:
                     particle.Particle(sq_x + rnd, sq_y - round(self.square_size / 1.5) + rnd, tiles['dust'],
                                       sp_x=rnd_sp, sp_y=-2,
                                       palette=settings.system['palettes'][square[-1][3]]))
+            # обработка удара по разным площадям
             new_objs, del_obj, score = self.object_trigger(square[-1], 1, audio, settings)
             if del_obj:
                 del square[-1]
@@ -578,7 +592,6 @@ class Maze:
                 self.particles.append(particle.Particle(sc_x, sc_y,
                                                         tiles[score * self.player.multiplier], 0, 0, life=60, grav=0,
                                                         palette=settings.system['palettes'][3]))
-
 
     def view_follow(self, tiles, counters, audio, y, settings):
         if y < self.space_height * self.square_size // 2:
@@ -643,167 +656,150 @@ class Maze:
         return True
 
     def object_trigger(self, object, tr_type, audio, settings):
-        if object[0] == 2 and tr_type == 1:  # log
-            if random.randrange(0, 2) == 0:
-                audio.bank_sound['crack'].play()
-                if random.randrange(0, 6) == 0:
-                    return [settings.object_keys['arrow']], True, None
+        # tr_type 0 - движение
+        # tr_type 1 - удар
+        if tr_type:  # tr_type == 1 (удар)
+            if object[0] == 2:  # log (удар по бревну)
+                if random.randrange(0, 2) == 0:
+                    audio.bank_sound['crack'].play()
+                    if random.randrange(0, 2) == 0:
+                        return [settings.object_keys['arrow']], True, None
+                    else:
+                        return None, True, None
+            elif object[0] == 3:  # tree (удар по дереву)
+                if random.randrange(0, 2) == 0:
+                    audio.bank_sound['crack'].play()
+                    return [settings.object_keys['log']], True, None
+            elif object[0] == 4:  # rock (удар по камню)
+                if random.randrange(0, 16) == 0:
+                    audio.bank_sound['crack'].play()
+                    if random.randrange(0, 11) == 0:
+                        return [settings.object_keys['gem_fl']], True, None
+                    else:
+                        return None, True, None
                 else:
-                    return None, True, None
-        elif object[0] == 3 and tr_type == 1:  # tree
-            if random.randrange(0, 2) == 0:
+                    audio.bank_sound['clank'].play()
+            elif object[0] == 8:  # door shut (удар по двери)
                 audio.bank_sound['crack'].play()
-                return [settings.object_keys['log']], True, None
-        elif object[0] == 4 and tr_type == 1:  # rock
-            if random.randrange(0, 16) == 0:
-                audio.bank_sound['crack'].play()
-                if random.randrange(0, 11) == 0:
-                    return [settings.object_keys['gem_fl']], True, None
-                else:
-                    return None, True, None
-            else:
+                return [settings.object_keys['door_o']], True, None
+            elif object[0] == 9:
                 audio.bank_sound['clank'].play()
-        elif object[0] == 5 and tr_type == 0:
-            self.player.lives = 0
-            audio.bank_sound['wound'].play()
-            self.kill_timer = 300
-            return None, False, None
-        elif object[0] == 8:
-            if tr_type == 0:  # door shut
+            elif object[0] == 15:  # arrow
+                audio.bank_sound['pierce'].play()
+                return None, True, None
+            elif object[0] == 16 or object[0] == 21 or object[0] == 22:  # meat chick apple
+                audio.bank_sound['pierce'].play()
+                return None, True, None
+            elif object[0] == 27:  # potion_bl
+                audio.bank_sound['crack'].play()
+                return None, True, None
+            elif object[0] == 31:  # skull common
+                audio.bank_sound['crack'].play()
+                return [self.roll_drop(settings, min=20)], True, None
+            elif object[0] == 34:
+                if random.randrange(0, 2) == 0:
+                    audio.bank_sound['crack'].play()
+                    if random.randrange(0, 11) == 0:
+                        return [settings.object_keys['apple']], True, None
+                    else:
+                        return None, True, None
+            elif object[0] == 151 or object[0] == 152:
+                audio.bank_sound['clank'].play()
+            elif object[0] == 230:  # gem shut
+                audio.bank_sound['crack'].play()
+                return None, True, None
+
+        else:  # tr_type == 0 (движение)
+            if object[0] == 5:
+                self.player.lives = 0
+                audio.bank_sound['wound'].play()
+                self.kill_timer = 300
+                return None, False, None
+            elif object[0] == 8:  # door shut
                 audio.bank_sound['open'].play()
                 return [settings.object_keys['door_o']], True, None
-            elif tr_type == 1:
-                audio.bank_sound['crack'].play()
-                return [settings.object_keys['door_o']], True, None
-        elif object[0] == 9:
-            if tr_type == 0 and self.player.keys > 0:
+            elif object[0] == 9:
                 self.player.keys -= 1
                 audio.bank_sound['unlock'].play()
                 audio.bank_sound['open'].play()
                 return [settings.object_keys['door_o']], True, 500
-            elif tr_type == 1:
-                audio.bank_sound['clank'].play()
-        elif object[0] == 13 and self.player.keys > 0 and tr_type == 0:  # lock
-            self.player.keys -= 1
-            audio.bank_sound['unlock'].play()
-            return None, True, 100
-        elif object[0] == 15:
-            if tr_type == 0:  # arrow
+            elif object[0] == 13 and self.player.keys > 0:  # lock
+                self.player.keys -= 1
+                audio.bank_sound['unlock'].play()
+                return None, True, 100
+            elif object[0] == 15:  # arrow
                 audio.bank_sound['arrow'].play()
                 if self.player.shots == self.player.max_shot:
                     return None, True, 50
                 else:
                     self.player.shots += 1
                     return None, True, None
-            else:
-                audio.bank_sound['pierce'].play()
-                return None, True, None
-        elif object[0] == 16:
-            if tr_type == 0:  # meat
+            elif object[0] == 16:  # meat
                 audio.bank_sound['eat'].play()
                 if self.player.lives == self.player.max_lives:
                     return None, True, 500
                 else:
                     self.player.lives = self.player.max_lives
                     return None, True, None
-            else:
-                audio.bank_sound['pierce'].play()
-                return None, True, None
-        elif object[0] == 18:
-            if tr_type == 0:  # key
+            elif object[0] == 18:
                 audio.bank_sound['key'].play()
                 if self.player.keys == self.player.max_keys:
                     return None, True, 200
                 else:
                     self.player.keys += 1
                     return None, True, None
-        elif object[0] == 21:
-            if tr_type == 0:  # chick
+            elif object[0] == 21:  # chick
                 audio.bank_sound['eat'].play()
                 if self.player.lives == self.player.max_lives:
                     return None, True, 100
                 else:
                     self.player.lives = min(self.player.max_lives, self.player.lives + 2)
                     return None, True, None
-            else:
-                audio.bank_sound['pierce'].play()
-                return None, True, None
-        elif object[0] == 22:
-            if tr_type == 0:  # apple
+            elif object[0] == 22:  # apple
                 audio.bank_sound['eat'].play()
                 if self.player.lives == self.player.max_lives:
                     return None, True, 50
                 else:
                     self.player.lives += 1
                     return None, True, None
-            else:
-                audio.bank_sound['pierce'].play()
-                return None, True, None
-        elif object[0] == 23 and tr_type == 0:  # chest shut
-            audio.bank_sound['open'].play()
-            return [settings.object_keys['chest_o'], self.roll_chest(settings, min=20)], True, None
-        elif object[0] == 27:
-            if tr_type == 0:  # potion_bl
+            elif object[0] == 23:  # chest shut
+                audio.bank_sound['open'].play()
+                return [settings.object_keys['chest_o'], self.roll_chest(settings, min=20)], True, None
+            elif object[0] == 27:  # potion_bl
                 audio.bank_sound['drink'].play()
                 if object[3] == 9:
                     self.player.blink = 600
                     return None, True, 1000
-            else:
-                audio.bank_sound['crack'].play()
-                return None, True, None
-        elif object[0] == 31:
-            if tr_type == 1:  # skull common
-                audio.bank_sound['crack'].play()
-                return [self.roll_drop(settings, min=20)], True, None
-        elif object[0] == 34 and tr_type == 1:
-            if random.randrange(0, 2) == 0:
-                audio.bank_sound['crack'].play()
-                if random.randrange(0, 11) == 0:
-                    return [settings.object_keys['apple']], True, None
-                else:
-                    return None, True, None
-        elif object[0] == 51:
-            if tr_type == 0:
+            elif object[0] == 51:
                 self.player.stage = 1
                 self.underworld_initial(audio, settings)
                 pl_view_x, pl_view_y = self.calculate_offsets(self.player.x, self.player.y, settings)
                 self.square_set(pl_view_x // self.square_size, pl_view_y // self.square_size + 1,
-                                    settings.object_keys['up_b'])
-        elif object[0] == 52:
-            if tr_type == 0:
+                                settings.object_keys['up_b'])
+
+            elif object[0] == 52:
                 self.player.stage = 0
                 self.world_initial(audio, settings)
                 pl_view_x, pl_view_y = self.calculate_offsets(self.player.x, self.player.y, settings)
                 self.square_set(pl_view_x // self.square_size, pl_view_y // self.square_size + 1,
                                 settings.object_keys['down_b'])
-        elif object[0] == 151:
-            if tr_type == 1:
-                audio.bank_sound['clank'].play()
-        elif object[0] == 152:
-            if tr_type == 1:
-                audio.bank_sound['clank'].play()
-        elif object[0] == 201 and tr_type == 0 and self.player.blink == 0:
-            self.player.lives = max(0, self.player.lives - 1)
-            self.player.multiplier = 1
-            self.player.multi_level = 0
-            audio.bank_sound['wound'].play()
-            self.player.blink = 60
-            if self.player.lives == 0:
-                self.kill_timer = 300
-            return None, False, None
-        elif object[0] == 229:
-            if tr_type == 0:  # coin
+            elif object[0] == 201 and self.player.blink == 0:
+                self.player.lives = max(0, self.player.lives - 1)
+                self.player.multiplier = 1
+                self.player.multi_level = 0
+                audio.bank_sound['wound'].play()
+                self.player.blink = 60
+                if self.player.lives == 0:
+                    self.kill_timer = 300
+                return None, False, None
+            elif object[0] == 229:  # coin
                 audio.bank_sound['coin'].play()
                 self.player.coins += 1
                 return None, True, 100
-        elif object[0] == 230:
-            if tr_type == 0:  # gem shut
+            elif object[0] == 230:
                 audio.bank_sound['gem'].play()
                 self.player.gems += 1
                 return None, True, 1000
-            elif tr_type == 1:
-                audio.bank_sound['crack'].play()
-                return None, True, None
 
         return None, False, None
 
